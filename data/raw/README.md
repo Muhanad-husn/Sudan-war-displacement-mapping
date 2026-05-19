@@ -32,18 +32,23 @@ Tool is the manual fallback and is available to standard accounts.
 1. Log in to ACLED, open the Data Export Tool.
 2. Filters:
    - Countries: **Sudan, Chad, South Sudan, Egypt, Ethiopia, Central African Republic**
-   - Event date: **2023-04-01 → 2025-05-19**
+   - Event date: from **2023-04-01** to the latest the tier allows (see embargo
+     note below — roughly the access date minus 12 months).
    - Export type: **Dyadic** (default)
    - Format: **CSV**, all columns.
 3. The tool saves the file as `ACLED Data_<YYYY-MM-DD>.csv`. **Rename it** to
    `acled_export_<access-date>.csv` so the loader's glob finds it
    (`load_acled_exports` in `data.py`).
 
-**Analysis window — fixed two-year window (decision, 2026-05-19).** The export
-covers 2023-04-01 → 2025-05-19. The Sudan war began April 2023; this is a clean
-two-year window matching the project's "two years into the Sudan war" framing
-(`CLAUDE.md`). The window is fixed, not "April 2023 → latest" — the pinned
-snapshot is the canonical input and is not silently re-fetched.
+**Analysis window — Apr 2023 → May 2025 (12-month tier embargo).** The account
+tier imposes a rolling **12-month embargo**: the most recent ~12 months of
+events are withheld from the export. An export pulled on access date 2026-05-19
+therefore ends at **2025-05-19** — this is the genuine maximum available, not a
+chosen cut-off. The resulting two-year window (2023-04-01 → 2025-05-19) happens
+to align with the project's "two years into the Sudan war" framing
+(`CLAUDE.md`). The pinned snapshot is the canonical input and is not silently
+re-fetched. **Limitation:** the analysis cannot describe violence/displacement
+after May 2025; this must be stated in the README limitations (Session 11).
 
 Pinned snapshot: `data/processed/acled_snapshot_2026-05-19.parquet`.
 
