@@ -11,7 +11,9 @@ ACLED loader (Session 2).
 from __future__ import annotations
 
 import json
+import re
 import tomllib
+import unicodedata
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -654,3 +656,215 @@ def load_gadm_admin1(force: bool = False):
     frames = [gpd.read_file(p) for p in paths.values()]
     combined = pd.concat(frames, ignore_index=True)
     return gpd.GeoDataFrame(combined, geometry="geometry", crs=frames[0].crs)
+
+
+# ===========================================================================
+# Admin-1 crosswalk / geo reconciliation (Session 4 — Decision 6)
+# ===========================================================================
+#
+# ACLED, IOM DTM and GADM each label admin-1 units with their own conventions:
+#   - ACLED   : English names with spaces ("North Kordofan", "Al Jazirah").
+#   - IOM DTM : OCHA names + pcodes ("Aj Jazirah", SD01-SD18).
+#   - GADM 4.1: BGN/PCGN romanisation, no spaces ("NorthKurdufan", "AlQadarif").
+# UNHCR cross-border data is country-level only (Decision D3), so its crosswalk
+# role is the destination *country* (ISO3), not an admin-1 unit.
+#
+# The crosswalk co-registers all of these on the GADM polygon set, keyed for
+# Sudan by the OCHA pcode (SD01-SD18 — also DTM's key) and for the neighbours
+# by GADM's GID_1. See decision block 6 for the full reconciliation rationale.
+
+CROSSWALK_PATH = PROCESSED_DIR / "admin1_crosswalk.csv"
+
+# ACLED reports "Abyei" as a 19th Sudan admin-1 unit. The Abyei Area is a
+# disputed Sudan/South Sudan territory with no GADM 4.1 polygon and no DTM
+# pcode. Per Decision 6 its ACLED events are folded into South Kordofan — the
+# Sudan state Abyei most directly adjoins (it was administratively carved out
+# of South Kordofan). The sensitivity of this merge is checked in S10.
+ACLED_ADMIN1_REMAP: dict[tuple[str, str], tuple[str, str]] = {
+    ("Sudan", "Abyei"): ("Sudan", "South Kordofan"),
+}
+
+# GADM admin-1 names that no amount of normalisation can bridge to the ACLED
+# string — distinct romanisations resolved by hand. Keyed by (ISO3, GADM
+# NAME_1) -> ACLED admin1 string. Egypt is deliberately absent: ACLED and GADM
+# use entirely different romanisation systems for all 27 governorates, and
+# Egypt's role here is a refugee *destination* (country-level, Decision D3) —
+# its admin-1 violence detail is not used by any deliverable, so reconciling
+# 27 governorate names by hand would be effort without downstream value.
+_CROSSWALK_NAME_OVERRIDES: dict[tuple[str, str], str] = {
+    ("SDN", "AlQadarif"): "Gedaref",
+    ("TCD", "VilledeN'Djamena"): "Ndjamena",
+    ("SSD", "Jungoli"): "Jonglei",
+    ("SSD", "Warap"): "Warrap",
+    ("SSD", "NorthBahr-al-Ghazal"): "Northern Bahr el Ghazal",
+    ("SSD", "WestBahr-al-Ghazal"): "Western Bahr el Ghazal",
+    ("SSD", "WestEquatoria"): "Western Equatoria",
+    ("ETH", "AddisAbeba"): "Addis Ababa",
+    ("ETH", "Benshangul-Gumaz"): "Benshangul/Gumuz",
+    ("ETH", "GambelaPeoples"): "Gambela",
+    ("ETH", "HarariPeople"): "Harari",
+}
+
+
+def _norm_admin1(name: object) -> str:
+    """Normalise an admin-1 name for matching across sources.
+
+    Strips diacritics, lower-cases, drops every non-alphanumeric character,
+    then applies a few token substitutions for known romanisation splits
+    (GADM's "Kurdufan" vs "Kordofan", "Aj Jazirah" vs "Al Jazirah"). This
+    bridges spacing, casing and accent differences; genuine romanisation
+    divergences are handled by :data:`_CROSSWALK_NAME_OVERRIDES`.
+    """
+    decomposed = unicodedata.normalize("NFKD", str(name))
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    key = re.sub(r"[^a-z0-9]", "", stripped.lower())
+    for src, dst in (("kurdufan", "kordofan"), ("ajjazirah", "aljazirah")):
+        key = key.replace(src, dst)
+    return key
+
+
+def _latest_snapshot(prefix: str) -> Path:
+    """Return the most recent ``data/processed/<prefix>_*.parquet`` snapshot."""
+    paths = sorted(PROCESSED_DIR.glob(f"{prefix}_*.parquet"))
+    if not paths:
+        raise FileNotFoundError(
+            f"No {prefix}_*.parquet snapshot in {PROCESSED_DIR}. Run the "
+            "corresponding ingestion session first."
+        )
+    return paths[-1]
+
+
+def build_admin1_crosswalk(write: bool = True) -> pd.DataFrame:
+    """Build the admin-1 crosswalk reconciling GADM, ACLED and IOM DTM.
+
+    Produces one row per GADM 4.1 admin-1 polygon (Sudan + 5 neighbours, 106
+    rows) with the matched ACLED admin1 string and — for Sudan — the IOM DTM
+    pcode/name. Matching is by :func:`_norm_admin1` normalisation, with
+    :data:`_CROSSWALK_NAME_OVERRIDES` for irreducible romanisation gaps.
+
+    Columns: ``country``, ``iso3``, ``gadm_gid1``, ``gadm_name1``,
+    ``canonical_pcode`` (OCHA SD-pcode for Sudan, GADM GID_1 elsewhere),
+    ``acled_admin1``, ``acled_aliases`` (extra ACLED strings folded in, e.g.
+    Abyei), ``dtm_pcode``, ``dtm_name``, ``match_method``, ``notes``.
+
+    Reads the pinned ACLED and DTM snapshots and the GADM polygons. Writes
+    ``data/processed/admin1_crosswalk.csv`` when ``write`` is True.
+    """
+    gadm = load_gadm_admin1()
+    acled = pd.read_parquet(_latest_snapshot("acled_snapshot"))
+    dtm = pd.read_parquet(_latest_snapshot("dtm_admin1_snapshot"))
+
+    # ACLED admin-1 strings per ISO3, after applying the remap rules so a
+    # remapped value (Abyei) is not reported as unmatched. `aliases` records,
+    # per target name, which extra ACLED strings were folded into it.
+    acled_lookup: dict[str, dict[str, str]] = {}
+    acled_aliases: dict[tuple[str, str], list[str]] = {}
+    for country, iso in GADM_ISO3.items():
+        names = set(acled.loc[acled.country == country, "admin1"].dropna())
+        resolved: dict[str, str] = {}
+        for raw in names:
+            remap = ACLED_ADMIN1_REMAP.get((country, raw))
+            target = remap[1] if remap else raw
+            resolved[_norm_admin1(target)] = target
+            if remap:
+                acled_aliases.setdefault((iso, target), []).append(raw)
+        acled_lookup[iso] = resolved
+
+    # DTM normalised lookup (Sudan only): normalised name -> (name, pcode).
+    dtm_lookup = {
+        _norm_admin1(r.admin1Name): (r.admin1Name, r.admin1Pcode)
+        for r in dtm[["admin1Name", "admin1Pcode"]].drop_duplicates().itertuples()
+    }
+
+    rows: list[dict] = []
+    for r in gadm.sort_values(["GID_0", "GID_1"]).itertuples():
+        iso = r.GID_0
+        gadm_name = r.NAME_1
+        norm_g = _norm_admin1(gadm_name)
+        country_acled = acled_lookup.get(iso, {})
+
+        override = _CROSSWALK_NAME_OVERRIDES.get((iso, gadm_name))
+        if override is not None:
+            acled_match: str | None = override
+            method = "manual_override"
+        elif gadm_name in {v for v in country_acled.values()}:
+            acled_match = gadm_name
+            method = "exact"
+        elif norm_g in country_acled:
+            acled_match = country_acled[norm_g]
+            method = "normalized"
+        else:
+            acled_match = None
+            method = "unmatched"
+
+        if iso == "SDN":
+            # DTM and ACLED romanise Sudan states near-identically; resolve the
+            # DTM pcode via the (override-corrected) ACLED match where present.
+            dtm_key = _norm_admin1(acled_match) if acled_match else norm_g
+            dtm_name, dtm_pcode = dtm_lookup.get(dtm_key, (None, None))
+            canonical = dtm_pcode
+        else:
+            dtm_name = dtm_pcode = None
+            canonical = r.GID_1
+
+        aliases = acled_aliases.get((iso, acled_match), []) if acled_match else []
+        notes = ""
+        if method == "unmatched":
+            notes = "no ACLED admin1 match — see decision block 6"
+        if aliases:
+            notes = f"ACLED '{', '.join(aliases)}' folded into this unit"
+
+        rows.append(
+            {
+                "country": r.COUNTRY,
+                "iso3": iso,
+                "gadm_gid1": r.GID_1,
+                "gadm_name1": gadm_name,
+                "canonical_pcode": canonical,
+                "acled_admin1": acled_match,
+                "acled_aliases": ";".join(aliases),
+                "dtm_pcode": dtm_pcode,
+                "dtm_name": dtm_name,
+                "match_method": method,
+                "notes": notes,
+            }
+        )
+
+    crosswalk = pd.DataFrame(rows)
+    if write:
+        crosswalk.to_csv(CROSSWALK_PATH, index=False)
+    return crosswalk
+
+
+def crosswalk_unmatched_acled() -> pd.DataFrame:
+    """Return ACLED admin1 strings with no row in the crosswalk.
+
+    These are ACLED units that did not match any GADM polygon — enumerated so
+    the non-matching cases are explicit (a Decision 6 completion criterion).
+    Abyei is *absent* here: it is remapped to South Kordofan, not dropped.
+    """
+    crosswalk = load_admin1_crosswalk()
+    acled = pd.read_parquet(_latest_snapshot("acled_snapshot"))
+    matched = {
+        (iso, _norm_admin1(name))
+        for iso, name in crosswalk[["iso3", "acled_admin1"]].dropna().itertuples(index=False)
+    }
+    iso_by_country = {c: i for c, i in GADM_ISO3.items()}
+    out: list[dict] = []
+    for country, raw in (
+        acled[["country", "admin1"]].dropna().drop_duplicates().itertuples(index=False)
+    ):
+        iso = iso_by_country[country]
+        remap = ACLED_ADMIN1_REMAP.get((country, raw))
+        if remap:
+            continue  # explicitly remapped, not unmatched
+        if (iso, _norm_admin1(raw)) not in matched:
+            out.append({"country": country, "iso3": iso, "acled_admin1": raw})
+    return pd.DataFrame(out).sort_values(["country", "acled_admin1"], ignore_index=True)
+
+
+def load_admin1_crosswalk() -> pd.DataFrame:
+    """Read the admin-1 crosswalk, building it on first use if absent."""
+    if not CROSSWALK_PATH.exists():
+        return build_admin1_crosswalk(write=True)
+    return pd.read_csv(CROSSWALK_PATH)

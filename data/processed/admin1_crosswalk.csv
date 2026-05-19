@@ -1,0 +1,107 @@
+country,iso3,gadm_gid1,gadm_name1,canonical_pcode,acled_admin1,acled_aliases,dtm_pcode,dtm_name,match_method,notes
+CentralAfricanRepublic,CAF,CAF.10_1,Nana-Grébizi,CAF.10_1,Nana-Grebizi,,,,normalized,
+CentralAfricanRepublic,CAF,CAF.11_1,Nana-Mambéré,CAF.11_1,Nana-Mambere,,,,normalized,
+CentralAfricanRepublic,CAF,CAF.12_1,Ombella-M'Poko,CAF.12_1,Ombella-M'Poko,,,,exact,
+CentralAfricanRepublic,CAF,CAF.13_1,Ouaka,CAF.13_1,Ouaka,,,,exact,
+CentralAfricanRepublic,CAF,CAF.14_1,Ouham-Pendé,CAF.14_1,Ouham-Pende,,,,normalized,
+CentralAfricanRepublic,CAF,CAF.15_1,Ouham,CAF.15_1,Ouham,,,,exact,
+CentralAfricanRepublic,CAF,CAF.16_1,Sangha-Mbaéré,CAF.16_1,Sangha-Mbaere,,,,normalized,
+CentralAfricanRepublic,CAF,CAF.17_1,Vakaga,CAF.17_1,Vakaga,,,,exact,
+CentralAfricanRepublic,CAF,CAF.1_1,Bamingui-Bangoran,CAF.1_1,Bamingui-Bangoran,,,,exact,
+CentralAfricanRepublic,CAF,CAF.2_1,Bangui,CAF.2_1,Bangui,,,,exact,
+CentralAfricanRepublic,CAF,CAF.3_1,Basse-Kotto,CAF.3_1,Basse-Kotto,,,,exact,
+CentralAfricanRepublic,CAF,CAF.4_1,Haut-Mbomou,CAF.4_1,Haut-Mbomou,,,,exact,
+CentralAfricanRepublic,CAF,CAF.5_1,Haute-Kotto,CAF.5_1,Haute-Kotto,,,,exact,
+CentralAfricanRepublic,CAF,CAF.6_1,Kémo,CAF.6_1,Kemo,,,,normalized,
+CentralAfricanRepublic,CAF,CAF.7_1,Lobaye,CAF.7_1,Lobaye,,,,exact,
+CentralAfricanRepublic,CAF,CAF.8_1,Mambéré-Kadéï,CAF.8_1,Mambere-Kadei,,,,normalized,
+CentralAfricanRepublic,CAF,CAF.9_1,Mbomou,CAF.9_1,Mbomou,,,,exact,
+Egypt,EGY,EGY.10_1,AlMinya,EGY.10_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.11_1,AlQahirah,EGY.11_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.12_1,AlQalyubiyah,EGY.12_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.13_1,AlUqsur,EGY.13_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.14_1,AlWadialJadid,EGY.14_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.15_1,AsSuways,EGY.15_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.16_1,AshSharqiyah,EGY.16_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.17_1,Aswan,EGY.17_1,Aswan,,,,exact,
+Egypt,EGY,EGY.18_1,Asyut,EGY.18_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.19_1,BaniSuwayf,EGY.19_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.1_1,AdDaqahliyah,EGY.1_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.20_1,BurSa`id,EGY.20_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.21_1,Dumyat,EGY.21_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.22_1,JanubSina',EGY.22_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.23_1,KafrashShaykh,EGY.23_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.24_1,Matrouh,EGY.24_1,Matrouh,,,,exact,
+Egypt,EGY,EGY.25_1,Qina,EGY.25_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.26_1,ShamalSina',EGY.26_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.27_1,Suhaj,EGY.27_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.2_1,AlBahralAhmar,EGY.2_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.3_1,AlBuhayrah,EGY.3_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.4_1,AlFayyum,EGY.4_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.5_1,AlGharbiyah,EGY.5_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.6_1,AlIskandariyah,EGY.6_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.7_1,AlIsma`iliyah,EGY.7_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.8_1,AlJizah,EGY.8_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Egypt,EGY,EGY.9_1,AlMinufiyah,EGY.9_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Ethiopia,ETH,ETH.10_1,"SouthernNations,Nationalities",ETH.10_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Ethiopia,ETH,ETH.11_1,Tigray,ETH.11_1,Tigray,,,,exact,
+Ethiopia,ETH,ETH.1_1,AddisAbeba,ETH.1_1,Addis Ababa,,,,manual_override,
+Ethiopia,ETH,ETH.2_1,Afar,ETH.2_1,Afar,,,,exact,
+Ethiopia,ETH,ETH.3_1,Amhara,ETH.3_1,Amhara,,,,exact,
+Ethiopia,ETH,ETH.4_1,Benshangul-Gumaz,ETH.4_1,Benshangul/Gumuz,,,,manual_override,
+Ethiopia,ETH,ETH.5_1,DireDawa,ETH.5_1,Dire Dawa,,,,normalized,
+Ethiopia,ETH,ETH.6_1,GambelaPeoples,ETH.6_1,Gambela,,,,manual_override,
+Ethiopia,ETH,ETH.7_1,HarariPeople,ETH.7_1,Harari,,,,manual_override,
+Ethiopia,ETH,ETH.8_1,Oromia,ETH.8_1,Oromia,,,,exact,
+Ethiopia,ETH,ETH.9_1,Somali,ETH.9_1,Somali,,,,exact,
+Sudan,SDN,SDN.10_1,Northern,SD17,Northern,,SD17,Northern,exact,
+Sudan,SDN,SDN.11_1,RedSea,SD10,Red Sea,,SD10,Red Sea,normalized,
+Sudan,SDN,SDN.12_1,RiverNile,SD16,River Nile,,SD16,River Nile,normalized,
+Sudan,SDN,SDN.13_1,Sennar,SD14,Sennar,,SD14,Sennar,exact,
+Sudan,SDN,SDN.14_1,SouthDarfur,SD03,South Darfur,,SD03,South Darfur,normalized,
+Sudan,SDN,SDN.15_1,SouthKurdufan,SD07,South Kordofan,Abyei,SD07,South Kordofan,normalized,ACLED 'Abyei' folded into this unit
+Sudan,SDN,SDN.16_1,WestDarfur,SD04,West Darfur,,SD04,West Darfur,normalized,
+Sudan,SDN,SDN.17_1,WestKurdufan,SD18,West Kordofan,,SD18,West Kordofan,normalized,
+Sudan,SDN,SDN.18_1,WhiteNile,SD09,White Nile,,SD09,White Nile,normalized,
+Sudan,SDN,SDN.1_1,AlJazirah,SD15,Al Jazirah,,SD15,Aj Jazirah,normalized,
+Sudan,SDN,SDN.2_1,AlQadarif,SD12,Gedaref,,SD12,Gedaref,manual_override,
+Sudan,SDN,SDN.3_1,BlueNile,SD08,Blue Nile,,SD08,Blue Nile,normalized,
+Sudan,SDN,SDN.4_1,CentralDarfur,SD06,Central Darfur,,SD06,Central Darfur,normalized,
+Sudan,SDN,SDN.5_1,EastDarfur,SD05,East Darfur,,SD05,East Darfur,normalized,
+Sudan,SDN,SDN.6_1,Kassala,SD11,Kassala,,SD11,Kassala,exact,
+Sudan,SDN,SDN.7_1,Khartoum,SD01,Khartoum,,SD01,Khartoum,exact,
+Sudan,SDN,SDN.8_1,NorthDarfur,SD02,North Darfur,,SD02,North Darfur,normalized,
+Sudan,SDN,SDN.9_1,NorthKurdufan,SD13,North Kordofan,,SD13,North Kordofan,normalized,
+SouthSudan,SSD,SSD.10_1,WestEquatoria,SSD.10_1,Western Equatoria,,,,manual_override,
+SouthSudan,SSD,SSD.1_1,CentralEquatoria,SSD.1_1,Central Equatoria,,,,normalized,
+SouthSudan,SSD,SSD.2_1,EasternEquatoria,SSD.2_1,Eastern Equatoria,,,,normalized,
+SouthSudan,SSD,SSD.3_1,Jungoli,SSD.3_1,Jonglei,,,,manual_override,
+SouthSudan,SSD,SSD.4_1,Lakes,SSD.4_1,Lakes,,,,exact,
+SouthSudan,SSD,SSD.5_1,NorthBahr-al-Ghazal,SSD.5_1,Northern Bahr el Ghazal,,,,manual_override,
+SouthSudan,SSD,SSD.6_1,Unity,SSD.6_1,Unity,,,,exact,
+SouthSudan,SSD,SSD.7_1,UpperNile,SSD.7_1,Upper Nile,,,,normalized,
+SouthSudan,SSD,SSD.8_1,Warap,SSD.8_1,Warrap,,,,manual_override,
+SouthSudan,SSD,SSD.9_1,WestBahr-al-Ghazal,SSD.9_1,Western Bahr el Ghazal,,,,manual_override,
+Chad,TCD,TCD.10_1,Lac,TCD.10_1,Lac,,,,exact,
+Chad,TCD,TCD.11_1,LogoneOccidental,TCD.11_1,Logone Occidental,,,,normalized,
+Chad,TCD,TCD.12_1,LogoneOriental,TCD.12_1,Logone Oriental,,,,normalized,
+Chad,TCD,TCD.13_1,Mandoul,TCD.13_1,Mandoul,,,,exact,
+Chad,TCD,TCD.14_1,Mayo-KebbiEst,TCD.14_1,Mayo Kebbi Est,,,,normalized,
+Chad,TCD,TCD.15_1,Mayo-KebbiOuest,TCD.15_1,Mayo Kebbi Ouest,,,,normalized,
+Chad,TCD,TCD.16_1,Moyen-Chari,TCD.16_1,Moyen-Chari,,,,exact,
+Chad,TCD,TCD.17_1,Ouaddaï,TCD.17_1,Ouaddai,,,,normalized,
+Chad,TCD,TCD.18_1,Salamat,TCD.18_1,Salamat,,,,exact,
+Chad,TCD,TCD.19_1,Sila,TCD.19_1,Sila,,,,exact,
+Chad,TCD,TCD.1_1,BarhelGhazel,TCD.1_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Chad,TCD,TCD.20_1,Tandjilé,TCD.20_1,Tandjile,,,,normalized,
+Chad,TCD,TCD.21_1,Tibesti,TCD.21_1,Tibesti,,,,exact,
+Chad,TCD,TCD.22_1,VilledeN'Djamena,TCD.22_1,Ndjamena,,,,manual_override,
+Chad,TCD,TCD.23_1,WadiFira,TCD.23_1,Wadi Fira,,,,normalized,
+Chad,TCD,TCD.2_1,Batha,TCD.2_1,Batha,,,,exact,
+Chad,TCD,TCD.3_1,Borkou,TCD.3_1,Borkou,,,,exact,
+Chad,TCD,TCD.4_1,Chari-Baguirmi,TCD.4_1,Chari Baguirmi,,,,normalized,
+Chad,TCD,TCD.5_1,EnnediEst,TCD.5_1,Ennedi Est,,,,normalized,
+Chad,TCD,TCD.6_1,EnnediOuest,TCD.6_1,,,,,unmatched,no ACLED admin1 match — see decision block 6
+Chad,TCD,TCD.7_1,Guéra,TCD.7_1,Guera,,,,normalized,
+Chad,TCD,TCD.8_1,Hadjer-Lamis,TCD.8_1,Hadjer-Lamis,,,,exact,
+Chad,TCD,TCD.9_1,Kanem,TCD.9_1,Kanem,,,,exact,
