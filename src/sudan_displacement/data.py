@@ -276,10 +276,7 @@ def fetch_acled(date_to: str | None = None) -> pd.DataFrame:
     read it back. Do not re-fetch silently in the analysis notebook.
     """
     date_to = date_to or datetime.now(UTC).date().isoformat()
-    frames = [
-        pd.DataFrame(_fetch_acled_country(country, date_to))
-        for country in ACLED_COUNTRIES
-    ]
+    frames = [pd.DataFrame(_fetch_acled_country(country, date_to)) for country in ACLED_COUNTRIES]
     df = pd.concat(frames, ignore_index=True)
     # ACLED revises records; event_id_cnty is the stable per-event key.
     if "event_id_cnty" in df.columns:
@@ -399,8 +396,8 @@ def fetch_unhcr_statistics(
     """
     year_to = year_to or datetime.now(UTC).year
     base = {
-        "coo": "SDN",          # country of origin = Sudan
-        "coa_all": "true",     # break results out by country of asylum
+        "coo": "SDN",  # country of origin = Sudan
+        "coa_all": "true",  # break results out by country of asylum
         "cf_type": "ISO",
         "yearFrom": year_from,
         "yearTo": year_to,
@@ -423,8 +420,9 @@ def fetch_unhcr_statistics(
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype("int64")
     keep = ["year", "coo_name", "coa_name", "coa_iso", *num_cols]
-    return df[[c for c in keep if c in df.columns]].sort_values(["year", "coa_name"],
-                                                                ignore_index=True)
+    return df[[c for c in keep if c in df.columns]].sort_values(
+        ["year", "coa_name"], ignore_index=True
+    )
 
 
 def fetch_unhcr_situation_countries(population_group: str = UNHCR_PG_REFUGEES) -> pd.DataFrame:
@@ -534,7 +532,7 @@ def _read_dtm_key() -> str:
     raise KeyError(
         "No IOM DTM subscription key found. Register a free key at "
         "https://dtm-apim-portal.iom.int/ and add it to secrets.toml as:\n"
-        "    [dtm]\n    subscription_key = \"...\"\n"
+        '    [dtm]\n    subscription_key = "..."\n'
         "or export it as the DTM_SUBSCRIPTION_KEY environment variable."
     )
 
@@ -635,9 +633,7 @@ def download_gadm_admin1(force: bool = False) -> dict[str, Path]:
     paths: dict[str, Path] = {}
     for country, iso3 in GADM_ISO3.items():
         fname = f"gadm41_{iso3}_1.json.zip"
-        paths[country] = download_file(
-            f"{GADM_BASE_URL}/{fname}", GADM_DIR / fname, force=force
-        )
+        paths[country] = download_file(f"{GADM_BASE_URL}/{fname}", GADM_DIR / fname, force=force)
     return paths
 
 
