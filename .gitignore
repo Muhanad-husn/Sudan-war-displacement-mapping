@@ -1,0 +1,87 @@
+# ---------------------------------------------------------------------------
+# AI assistant / agent tooling — keep all of this out of the repo
+# ---------------------------------------------------------------------------
+# Claude
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.claude.json
+# Implementation / session planning artifacts
+IMPLEMENTATION_PLAN.md
+*_Implementation_Plan.md
+*-session-plan.md
+tracking/
+# Cursor
+.cursor/
+.cursorrules
+.cursorignore
+.cursorindexingignore
+# Aider
+.aider*
+# Cline / Roo
+.cline/
+.clinerules
+.clinerules/
+.roo/
+.roomodes
+# Windsurf / Codeium
+.windsurf/
+.windsurfrules
+.codeium/
+# GitHub Copilot
+.github/copilot-instructions.md
+copilot-instructions.md
+# Gemini
+GEMINI.md
+.gemini/
+# Generic agent instruction files
+AGENT.md
+AGENTS.md
+.specstory/
+.tabnine/
+# MCP server config
+.mcp.json
+
+# ---------------------------------------------------------------------------
+# Secrets & credentials
+# ---------------------------------------------------------------------------
+secrets.toml
+*secrets*.toml
+.env
+.env.*
+tokens.json
+token.json
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ---------------------------------------------------------------------------
+# Project data & scratch
+# ---------------------------------------------------------------------------
+notebooks/_scratch/
+data/raw/*
+!data/raw/README.md
+*.cache
+.requests_cache.sqlite
+
+# ---------------------------------------------------------------------------
+# OS / editor
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
