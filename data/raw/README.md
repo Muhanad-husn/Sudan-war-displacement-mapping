@@ -85,12 +85,25 @@ cache, clear `.cache/http_cache.sqlite`.
 
 ## IOM DTM — internal displacement (Session 3)
 
-> **ACTION REQUIRED — register a free DTM API subscription key.**
-
 IOM's Displacement Tracking Matrix exposes a public v3 API for non-sensitive
 IDP figures at country / admin-1 / admin-2 level. It needs a **free**
 subscription key — there is no anonymous access and no bulk file download for
 the admin-1 series.
+
+| Field | Value |
+|-------|-------|
+| Endpoint | `https://dtmapi.iom.int/v3/displacement/admin1` |
+| Auth | `Ocp-Apim-Subscription-Key` header (free key) |
+| Filters | `CountryName=Sudan`, `FromReportingDate=2023-04-01`, `ToReportingDate=<access date>` |
+| Loader | `fetch_dtm_admin1()` / `snapshot_dtm()` |
+| Pinned snapshot | `data/processed/dtm_admin1_snapshot_2026-05-19.parquet` |
+
+**Pinned snapshot (access date 2026-05-19).** 9,043 rows × 17 columns, 18
+Sudan admin-1 regions, 85 reporting dates / 46 assessment rounds, IDP figures
+spanning **2023-04-28 → 2026-02-28**. Note this extends ~9 months past the
+ACLED window (D2, ends 2025-05-19) — the displacement layer is clipped to the
+common window for co-registered figures (S6).
+SHA256 `f9f7cad909173334aced7681b2da7dee686ee64ae4442be445d97d0d3a2edc7f`.
 
 **Re-acquisition steps.**
 
@@ -102,19 +115,13 @@ the admin-1 series.
    subscription_key = "..."
    ```
    (or export it as the `DTM_SUBSCRIPTION_KEY` environment variable).
-4. Call `snapshot_dtm()` in `data.py` to write the pinned snapshot
-   `data/processed/dtm_admin1_snapshot_<access-date>.parquet`.
+4. Call `snapshot_dtm()` in `data.py` to rewrite the pinned snapshot.
 
-| Field | Value |
-|-------|-------|
-| Endpoint | `https://dtmapi.iom.int/v3/displacement/admin1` |
-| Auth | `Ocp-Apim-Subscription-Key` header (free key) |
-| Filters | `CountryName=Sudan`, `FromReportingDate=2023-04-01`, `ToReportingDate=<access date>` |
-| Loader | `fetch_dtm_admin1()` / `snapshot_dtm()` |
-
-The DTM admin-1 snapshot is **pending** until the key is provided — it is the
-one remaining open item for a fully reproducible run (see
-`IMPLEMENTATION_PLAN.md` "Open items requiring the user").
+**Gotcha — Azure WAF blocks the default User-Agent.** The DTM API sits behind
+a Microsoft Azure Application Gateway that returns an HTML `403 Forbidden` to
+the default `python-requests` User-Agent *before* the request reaches the API
+key check. `data.py` sends a browser-style `User-Agent` on DTM calls to get
+through — do not remove it.
 
 ## GADM 4.1 — admin-1 boundaries (Session 3)
 

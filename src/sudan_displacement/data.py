@@ -504,6 +504,13 @@ def fetch_unhcr_situation_timeseries(refugees_only: bool = True) -> pd.DataFrame
 DTM_BASE_URL = "https://dtmapi.iom.int/v3/displacement"
 # DTM `Operation` / `CountryName` value for the Sudan crisis response.
 DTM_SUDAN_COUNTRY = "Sudan"
+# The DTM API sits behind an Azure Application Gateway WAF that blocks the
+# default `python-requests` User-Agent with an HTML 403 (before the request
+# ever reaches the API key check). A browser-style UA gets through.
+DTM_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+)
 
 
 def _read_dtm_key() -> str:
@@ -539,7 +546,10 @@ def _fetch_dtm(level: str, **params: object) -> pd.DataFrame:
     resp = session.get(
         f"{DTM_BASE_URL}/{level}",
         params={k: v for k, v in params.items() if v is not None},
-        headers={"Ocp-Apim-Subscription-Key": _read_dtm_key()},
+        headers={
+            "Ocp-Apim-Subscription-Key": _read_dtm_key(),
+            "User-Agent": DTM_USER_AGENT,  # bypasses the Azure WAF (see above)
+        },
         timeout=120,
     )
     resp.raise_for_status()
