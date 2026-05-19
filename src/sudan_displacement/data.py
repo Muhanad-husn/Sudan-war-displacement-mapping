@@ -338,3 +338,309 @@ def snapshot_acled(
     path = PROCESSED_DIR / f"acled_snapshot_{access_date}.parquet"
     df.to_parquet(path, index=False)
     return path
+
+
+# ===========================================================================
+# UNHCR ingestion (Session 3)
+# ===========================================================================
+#
+# Two complementary UNHCR sources, both public and key-free:
+#
+#  1. Refugee Statistics API (api.unhcr.org) -- *annual* origin->asylum counts.
+#     Clean, complete back to 2023, broken out by country of asylum. This is
+#     the canonical cross-border origin-destination source.
+#  2. Operational Data Portal (data.unhcr.org) -- the "Sudan situation"
+#     (situation_view_id 63). Gives a daily/weekly *cumulative* time series
+#     (situation-wide) and a per-destination-country cumulative snapshot. The
+#     portal does NOT expose a per-country time series, so per-country
+#     granularity is annual (source 1) and the portal supplies the temporal
+#     shape of the aggregate (source 2).
+#
+# The portal reports each destination country as of a different date (e.g.
+# Egypt is frozen months behind Chad) -- a caveat for the S6 reconciliation.
+
+UNHCR_STATS_URL = "https://api.unhcr.org/population/v1/population/"
+UNHCR_PORTAL_URL = "https://data.unhcr.org/population/"
+UNHCR_PORTAL_TS_URL = "https://data.unhcr.org/population/get/timeseries"
+UNHCR_PORTAL_SUBLOC_URL = "https://data.unhcr.org/population/get/sublocation"
+
+# data.unhcr.org "Sudan situation" identifiers (discovered from the portal page).
+UNHCR_SUDAN_SITUATION_ID = 63
+# Portal population groups within the Sudan situation:
+#   5550 Refugees from Sudan - Newly Arrival 2023   (cross-border refugees)
+#   5551 Refugees from Sudan - Newly returnees 2023
+#   5552 IDP in Sudan - 2023 Situation
+#   5583 Self-relocated Refugees in Sudan
+UNHCR_PG_REFUGEES = "5550"
+UNHCR_PG_ALL = "5550,5551,5552,5583"
+# Portal widget ids on the Sudan situation page (situation-wide aggregates).
+UNHCR_WIDGET_REFUGEES = 677407  # refugees-only cumulative series
+UNHCR_WIDGET_ALL = 677404  # all-displacement cumulative series
+
+ACLED_START_YEAR = 2023
+
+
+def fetch_unhcr_statistics(
+    year_from: int = ACLED_START_YEAR, year_to: int | None = None
+) -> pd.DataFrame:
+    """Fetch annual UNHCR refugee counts, origin Sudan -> each country of asylum.
+
+    Uses the Refugee Statistics API (``api.unhcr.org``), which needs no key.
+    Returns one row per ``(year, country_of_asylum)`` for refugees originating
+    in Sudan. Numeric columns are coerced to integers (the API emits ``"-"``
+    and ``"0"`` as strings).
+
+    Parameters
+    ----------
+    year_from, year_to
+        Inclusive year bounds. ``year_to`` defaults to the current UTC year.
+    """
+    year_to = year_to or datetime.now(UTC).year
+    base = {
+        "coo": "SDN",          # country of origin = Sudan
+        "coa_all": "true",     # break results out by country of asylum
+        "cf_type": "ISO",
+        "yearFrom": year_from,
+        "yearTo": year_to,
+        "limit": 1000,
+    }
+    rows: list[dict] = []
+    page = 1
+    while True:
+        resp = session.get(UNHCR_STATS_URL, params={**base, "page": page}, timeout=60)
+        resp.raise_for_status()
+        payload = resp.json()
+        rows.extend(payload.get("items") or [])
+        if page >= int(payload.get("maxPages", 1)):
+            break
+        page += 1
+
+    df = pd.DataFrame(rows)
+    num_cols = ["refugees", "asylum_seekers", "returned_refugees", "idps", "stateless"]
+    for col in num_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype("int64")
+    keep = ["year", "coo_name", "coa_name", "coa_iso", *num_cols]
+    return df[[c for c in keep if c in df.columns]].sort_values(["year", "coa_name"],
+                                                                ignore_index=True)
+
+
+def fetch_unhcr_situation_countries(population_group: str = UNHCR_PG_REFUGEES) -> pd.DataFrame:
+    """Fetch cumulative Sudan-origin arrivals by destination country (portal snapshot).
+
+    Hits the Operational Data Portal ``sublocation`` endpoint for the Sudan
+    situation. Returns one row per destination country with the latest
+    cumulative ``individuals`` count and the ``as_of_date`` it was reported --
+    the as-of date differs per country, so it is kept as a column.
+    """
+    resp = session.get(
+        UNHCR_PORTAL_SUBLOC_URL,
+        params={
+            "widget_id": UNHCR_WIDGET_ALL,
+            "sv_id": UNHCR_SUDAN_SITUATION_ID,
+            "population_group": population_group,
+            "forcesvid": 1,
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    data = resp.json().get("data") or []
+    df = pd.DataFrame(
+        {
+            "destination": r.get("geomaster_name"),
+            "geomaster_id": r.get("geomaster_id"),
+            "individuals": pd.to_numeric(r.get("individuals"), errors="coerce"),
+            "as_of_date": r.get("date"),
+            "centroid_lat": r.get("centroid_lat"),
+            "centroid_lon": r.get("centroid_lon"),
+        }
+        for r in data
+    )
+    df["origin"] = "Sudan"
+    return df.sort_values("individuals", ascending=False, ignore_index=True)
+
+
+def fetch_unhcr_situation_timeseries(refugees_only: bool = True) -> pd.DataFrame:
+    """Fetch the situation-wide cumulative displacement time series (portal).
+
+    Returns a ``(date, individuals)`` frame -- daily early in the crisis,
+    weekly later. ``refugees_only=True`` covers cross-border refugees;
+    ``False`` covers all displacement (refugees + returnees + IDPs +
+    self-relocated). The series is *cumulative*, not per-period.
+    """
+    widget = UNHCR_WIDGET_REFUGEES if refugees_only else UNHCR_WIDGET_ALL
+    pg = UNHCR_PG_REFUGEES if refugees_only else UNHCR_PG_ALL
+    resp = session.get(
+        UNHCR_PORTAL_TS_URL,
+        params={
+            "widget_id": widget,
+            "sv_id": UNHCR_SUDAN_SITUATION_ID,
+            "population_group": pg,
+            "frequency": "day",
+            "fromDate": ACLED_START_DATE,
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    ts = (resp.json().get("data") or {}).get("timeseries") or []
+    df = pd.DataFrame(ts)
+    if not df.empty:
+        df["date"] = pd.to_datetime(df["data_date"])
+        df["individuals"] = pd.to_numeric(df["individuals"], errors="coerce")
+        df = df[["date", "individuals"]].sort_values("date", ignore_index=True)
+    return df
+
+
+# ===========================================================================
+# IOM DTM ingestion (Session 3)
+# ===========================================================================
+#
+# IOM's Displacement Tracking Matrix exposes a public v3 API for non-sensitive
+# IDP figures at country / admin-1 / admin-2 level. It needs a *free*
+# subscription key (register at https://dtm-apim-portal.iom.int/), passed in
+# the `Ocp-Apim-Subscription-Key` header. Store the key in the [dtm] block of
+# secrets.toml (key `subscription_key`) or the DTM_SUBSCRIPTION_KEY env var.
+
+DTM_BASE_URL = "https://dtmapi.iom.int/v3/displacement"
+# DTM `Operation` / `CountryName` value for the Sudan crisis response.
+DTM_SUDAN_COUNTRY = "Sudan"
+
+
+def _read_dtm_key() -> str:
+    """Return the IOM DTM API subscription key.
+
+    Looks first in the ``[dtm]`` block of ``secrets.toml`` (key
+    ``subscription_key``), then the ``DTM_SUBSCRIPTION_KEY`` environment
+    variable. Raises a clear, actionable error if neither is set.
+    """
+    import os
+
+    if SECRETS_PATH.exists():
+        block = tomllib.loads(SECRETS_PATH.read_text(encoding="utf-8")).get("dtm", {})
+        if block.get("subscription_key"):
+            return str(block["subscription_key"])
+    env_key = os.environ.get("DTM_SUBSCRIPTION_KEY")
+    if env_key:
+        return env_key
+    raise KeyError(
+        "No IOM DTM subscription key found. Register a free key at "
+        "https://dtm-apim-portal.iom.int/ and add it to secrets.toml as:\n"
+        "    [dtm]\n    subscription_key = \"...\"\n"
+        "or export it as the DTM_SUBSCRIPTION_KEY environment variable."
+    )
+
+
+def _fetch_dtm(level: str, **params: object) -> pd.DataFrame:
+    """GET one DTM v3 displacement endpoint and return ``result`` as a frame.
+
+    ``level`` is ``"admin0"``, ``"admin1"``, ``"admin2"`` or ``"country-list"``.
+    The DTM API wraps its payload as ``{isSuccess, result, errorMessages}``.
+    """
+    resp = session.get(
+        f"{DTM_BASE_URL}/{level}",
+        params={k: v for k, v in params.items() if v is not None},
+        headers={"Ocp-Apim-Subscription-Key": _read_dtm_key()},
+        timeout=120,
+    )
+    resp.raise_for_status()
+    payload = resp.json()
+    if not payload.get("isSuccess", False):
+        raise RuntimeError(f"DTM API error: {payload.get('errorMessages')}")
+    return pd.DataFrame(payload.get("result") or [])
+
+
+def fetch_dtm_admin1(
+    country: str = DTM_SUDAN_COUNTRY,
+    from_date: str = ACLED_START_DATE,
+    to_date: str | None = None,
+) -> pd.DataFrame:
+    """Fetch IOM DTM admin-1 internal-displacement (IDP) counts for ``country``.
+
+    Returns the DTM admin-1 IDP series -- one row per ``(admin1, reporting
+    round)`` -- over the war window. Requires a DTM subscription key (see
+    :func:`_read_dtm_key`). The canonical analytic input is the pinned
+    snapshot written by :func:`snapshot_dtm`, not this live call.
+    """
+    return _fetch_dtm(
+        "admin1",
+        CountryName=country,
+        FromReportingDate=from_date,
+        ToReportingDate=to_date or datetime.now(UTC).date().isoformat(),
+    )
+
+
+def dtm_country_list() -> pd.DataFrame:
+    """Fetch the list of countries/operations covered by the IOM DTM API."""
+    return _fetch_dtm("country-list")
+
+
+def snapshot_dtm(access_date: str | None = None) -> Path:
+    """Write the pinned IOM DTM admin-1 parquet snapshot for Sudan.
+
+    Writes ``data/processed/dtm_admin1_snapshot_<access_date>.parquet``. DTM
+    revises figures as new assessment rounds publish, so -- as with ACLED --
+    this snapshot is the canonical analytic input, refreshed only explicitly.
+    """
+    access_date = access_date or datetime.now(UTC).date().isoformat()
+    df = fetch_dtm_admin1()
+    path = PROCESSED_DIR / f"dtm_admin1_snapshot_{access_date}.parquet"
+    df.to_parquet(path, index=False)
+    return path
+
+
+# ===========================================================================
+# GADM admin-1 boundaries (Session 3)
+# ===========================================================================
+#
+# GADM 4.1 admin-1 (state/province) polygons for Sudan + the five neighbours,
+# downloaded as per-country zipped GeoJSON from the public UC Davis mirror.
+# Used in S4 to co-register the violence and displacement layers on a common
+# admin-1 grid.
+
+GADM_BASE_URL = "https://geodata.ucdavis.edu/gadm/gadm4.1/json"
+GADM_DIR = RAW_DIR / "gadm"
+
+# Country -> ISO 3166-1 alpha-3 (GADM file codes). Names match ACLED's
+# `country` field for a clean later join.
+GADM_ISO3 = {
+    "Sudan": "SDN",
+    "Chad": "TCD",
+    "South Sudan": "SSD",
+    "Egypt": "EGY",
+    "Ethiopia": "ETH",
+    "Central African Republic": "CAF",
+}
+
+
+def download_gadm_admin1(force: bool = False) -> dict[str, Path]:
+    """Download GADM 4.1 admin-1 GeoJSON for Sudan + 5 neighbours.
+
+    Each country is a separate zipped GeoJSON (``gadm41_<ISO3>_1.json.zip``).
+    Files land in ``data/raw/gadm/`` (gitignored). Returns a mapping of
+    country name -> local zip path.
+    """
+    GADM_DIR.mkdir(parents=True, exist_ok=True)
+    paths: dict[str, Path] = {}
+    for country, iso3 in GADM_ISO3.items():
+        fname = f"gadm41_{iso3}_1.json.zip"
+        paths[country] = download_file(
+            f"{GADM_BASE_URL}/{fname}", GADM_DIR / fname, force=force
+        )
+    return paths
+
+
+def load_gadm_admin1(force: bool = False):
+    """Load GADM 4.1 admin-1 polygons for all six countries as one GeoDataFrame.
+
+    Downloads on first call (see :func:`download_gadm_admin1`), then reads each
+    zipped GeoJSON with geopandas and concatenates. The key columns for the S4
+    crosswalk are ``COUNTRY``, ``NAME_1`` (admin-1 name) and ``GID_1``.
+
+    Requires the ``[geo]`` extra (geopandas + pyogrio).
+    """
+    import geopandas as gpd
+
+    paths = download_gadm_admin1(force=force)
+    frames = [gpd.read_file(p) for p in paths.values()]
+    combined = pd.concat(frames, ignore_index=True)
+    return gpd.GeoDataFrame(combined, geometry="geometry", crs=frames[0].crs)
