@@ -864,3 +864,125 @@ def load_admin1_crosswalk() -> pd.DataFrame:
     if not CROSSWALK_PATH.exists():
         return build_admin1_crosswalk(write=True)
     return pd.read_csv(CROSSWALK_PATH)
+
+
+# ===========================================================================
+# Violence layer — admin-1 x time aggregation (Session 5 — Decisions 1, 2, 3)
+# ===========================================================================
+#
+# The violence layer aggregates the pinned ACLED snapshot to one row per
+# (Sudan admin-1 state, time bin). The three S5 decisions are baked in as the
+# default arguments and documented five-part in notebooks/02_main.ipynb:
+#   D1  event-type filter -> VIOLENT_EVENT_TYPES (Battles + Explosions/Remote
+#                            violence + Violence against civilians)
+#   D2  geo-precision     -> geo_precision_max=None (keep all tiers; admin-1 is
+#                            coarser than the worst precision tier present)
+#   D3  temporal bin      -> freq="M" (monthly)
+# Every argument stays open so 03_robustness.ipynb can re-run under alternatives.
+
+# ACLED event types that count as kinetic "violence" for this analysis (D1).
+# Excludes Protests/Riots (Demonstrations) and Strategic developments
+# (non-kinetic: agreements, territory transfers, group/activity changes).
+VIOLENT_EVENT_TYPES = (
+    "Battles",
+    "Explosions/Remote violence",
+    "Violence against civilians",
+)
+
+# Analysis window: war onset -> the ACLED tier embargo cut (Decision D2).
+VIOLENCE_WINDOW = ("2023-04-01", "2025-05-19")
+
+# Pandas period-frequency code -> filename label for the pinned layer.
+_FREQ_LABEL = {"M": "monthly", "W": "weekly"}
+
+
+def build_violence_layer(
+    event_types: tuple[str, ...] = VIOLENT_EVENT_TYPES,
+    freq: str = "M",
+    geo_precision_max: int | None = None,
+    window: tuple[str, str] = VIOLENCE_WINDOW,
+    write: bool = True,
+) -> pd.DataFrame:
+    """Aggregate the pinned ACLED snapshot to a Sudan admin-1 x time violence layer.
+
+    Filters the snapshot to ``event_types`` (D1), optionally drops events above
+    ``geo_precision_max`` (D2), folds Abyei into South Kordofan and joins the
+    admin-1 crosswalk (D6), then counts events and sums fatalities per
+    ``(canonical_pcode, period)`` bin (D3). The result is grid-complete: every
+    (pcode x period) cell exists, zero-filled, so heatmaps and the animation
+    never show an ambiguous gap.
+
+    Parameters
+    ----------
+    event_types
+        ACLED ``event_type`` values kept as "violence" (Decision 1).
+    freq
+        Pandas period frequency for the time bin -- ``"M"`` monthly (Decision 3
+        default) or ``"W"`` weekly (the robustness alternative).
+    geo_precision_max
+        If set, drop events with ``geo_precision`` above this (Decision 2
+        default ``None`` keeps all tiers).
+    window
+        Inclusive ``(start, end)`` date bounds (Decision D2).
+    write
+        If True, pin the layer to
+        ``data/processed/violence_admin1_<freq-label>.parquet``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``canonical_pcode``, ``admin1``, ``period``, ``n_events``,
+        ``fatalities`` -- one row per Sudan state x time bin.
+    """
+    acled = pd.read_parquet(_latest_snapshot("acled_snapshot"))
+    crosswalk = load_admin1_crosswalk()
+
+    v = acled[acled["country"] == "Sudan"].copy()
+    v = v[v["event_type"].isin(event_types)]
+    if geo_precision_max is not None:
+        v = v[v["geo_precision"] <= geo_precision_max]
+    v["event_date"] = pd.to_datetime(v["event_date"])
+    lo, hi = pd.Timestamp(window[0]), pd.Timestamp(window[1])
+    v = v[(v["event_date"] >= lo) & (v["event_date"] <= hi)]
+
+    # D6 -- fold Abyei into South Kordofan before the crosswalk join, so its
+    # events land in an adjoining state rather than dropping out of the join.
+    for (country, src), (_, dst) in ACLED_ADMIN1_REMAP.items():
+        v.loc[(v["country"] == country) & (v["admin1"] == src), "admin1"] = dst
+
+    sd_xw = crosswalk[crosswalk["iso3"] == "SDN"]
+    pcode_of = dict(zip(sd_xw["acled_admin1"], sd_xw["canonical_pcode"]))
+    # Use the spaced ACLED names as the display label (GADM's are unspaced).
+    name_of = dict(zip(sd_xw["canonical_pcode"], sd_xw["acled_admin1"]))
+    v["canonical_pcode"] = v["admin1"].map(pcode_of)
+    n_missing = int(v["canonical_pcode"].isna().sum())
+    if n_missing:
+        bad = sorted(v.loc[v["canonical_pcode"].isna(), "admin1"].dropna().unique())
+        raise ValueError(
+            f"{n_missing} Sudan violent events did not match a crosswalk pcode "
+            f"(unmatched admin1: {bad}). Check ACLED_ADMIN1_REMAP / the crosswalk."
+        )
+
+    v["period"] = v["event_date"].dt.to_period(freq).dt.to_timestamp()
+    agg = (
+        v.groupby(["canonical_pcode", "period"])
+        .agg(n_events=("event_id_cnty", "size"), fatalities=("fatalities", "sum"))
+        .reset_index()
+    )
+
+    # Complete the grid: every (pcode x period) cell, zero-filled.
+    periods = pd.period_range(lo, hi, freq=freq).to_timestamp()
+    grid = pd.MultiIndex.from_product(
+        [sorted(pcode_of.values()), periods], names=["canonical_pcode", "period"]
+    )
+    layer = (
+        agg.set_index(["canonical_pcode", "period"]).reindex(grid, fill_value=0).reset_index()
+    )
+    layer["admin1"] = layer["canonical_pcode"].map(name_of)
+    layer = layer[["canonical_pcode", "admin1", "period", "n_events", "fatalities"]]
+    layer = layer.sort_values(["canonical_pcode", "period"], ignore_index=True)
+
+    if write:
+        label = _FREQ_LABEL.get(freq, freq)
+        layer.to_parquet(PROCESSED_DIR / f"violence_admin1_{label}.parquet", index=False)
+    return layer
