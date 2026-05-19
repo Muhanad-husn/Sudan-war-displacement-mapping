@@ -975,9 +975,7 @@ def build_violence_layer(
     grid = pd.MultiIndex.from_product(
         [sorted(pcode_of.values()), periods], names=["canonical_pcode", "period"]
     )
-    layer = (
-        agg.set_index(["canonical_pcode", "period"]).reindex(grid, fill_value=0).reset_index()
-    )
+    layer = agg.set_index(["canonical_pcode", "period"]).reindex(grid, fill_value=0).reset_index()
     layer["admin1"] = layer["canonical_pcode"].map(name_of)
     layer = layer[["canonical_pcode", "admin1", "period", "n_events", "fatalities"]]
     layer = layer.sort_values(["canonical_pcode", "period"], ignore_index=True)
@@ -986,3 +984,182 @@ def build_violence_layer(
         label = _FREQ_LABEL.get(freq, freq)
         layer.to_parquet(PROCESSED_DIR / f"violence_admin1_{label}.parquet", index=False)
     return layer
+
+
+# ===========================================================================
+# Displacement layer — internal IDP layer + O-D dataset (Session 6 — D5, D7)
+# ===========================================================================
+#
+# The displacement picture has two complementary, *non-overlapping* flows
+# (Decision 5): internal displacement inside Sudan (IOM DTM, admin-1) and
+# cross-border refugee flows out of Sudan (UNHCR, country-level). They are kept
+# as two layers, never summed into one "displacement" number.
+#
+#  - build_displacement_layer() -> the internal IDP layer: present-IDP stock per
+#    Sudan admin-1 x month, mirroring the violence layer (for the heatmap, the
+#    bivariate choropleth and the dashboard).
+#  - build_displacement_od()    -> the origin-destination dataset: internal
+#    admin-1 -> admin-1 flows (DTM) + cross-border Sudan -> country flows
+#    (UNHCR), for the chord/network diagram.
+
+# D7 — the DTM snapshot carries three operations that track the *same* IDP
+# population under different DTM products, at incompatible magnitudes (Aug 2023:
+# the weekly op reports 3.8M, "(Overview)" 7.1M). Using more than one would
+# multiply-count. "(Overview)" is the only one spanning the analytic window;
+# see decision block 7.
+DTM_OPERATION = "Armed Clashes in Sudan (Overview)"
+
+# The DTM "(Overview)" series begins Aug 2023 (4 months after war onset, which
+# the ACLED violence layer does cover) and is clipped at the D2 embargo end.
+# Co-registered figures must note the displacement layer's later start.
+DISPLACEMENT_WINDOW = ("2023-08-01", "2025-05-31")
+
+# DTM marks unknown displacement origins with this sentinel string.
+DTM_ORIGIN_UNKNOWN = "Not available"
+
+
+def build_displacement_layer(
+    operation: str = DTM_OPERATION,
+    freq: str = "M",
+    window: tuple[str, str] = DISPLACEMENT_WINDOW,
+    write: bool = True,
+) -> pd.DataFrame:
+    """Aggregate the pinned DTM snapshot to a Sudan admin-1 x time IDP layer.
+
+    Filters the DTM snapshot to one ``operation`` (Decision 7), sums the
+    origin breakdown to a per-destination present-IDP *stock*, keeps the latest
+    reporting round within each ``(state, period)`` bin, then completes the
+    monthly grid and **forward-fills** the stock across DTM's irregular
+    assessment cadence (an IDP stock persists between rounds — unlike the
+    violence layer's event *counts*, a missing month is not a zero).
+
+    Parameters
+    ----------
+    operation
+        DTM ``operation`` to use (Decision 7 default ``"(Overview)"``).
+    freq
+        Pandas period frequency for the time bin -- ``"M"`` monthly.
+    window
+        Inclusive ``(start, end)`` date bounds. Defaults to the DTM
+        ``"(Overview)"`` coverage clipped at the D2 embargo end.
+    write
+        If True, pin the layer to
+        ``data/processed/displacement_admin1_<freq-label>.parquet``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``canonical_pcode``, ``admin1``, ``period``, ``idp_present`` --
+        one row per Sudan state x time bin.
+    """
+    dtm = pd.read_parquet(_latest_snapshot("dtm_admin1_snapshot"))
+    crosswalk = load_admin1_crosswalk()
+
+    d = dtm[dtm["operation"] == operation].copy()
+    d["reportingDate"] = pd.to_datetime(d["reportingDate"])
+    lo, hi = pd.Timestamp(window[0]), pd.Timestamp(window[1])
+    d = d[(d["reportingDate"] >= lo) & (d["reportingDate"] <= hi)]
+
+    # Present-IDP is a stock: sum the origin breakdown to a per-destination
+    # total, then keep the latest reporting round within each (state, period).
+    stock = d.groupby(["admin1Pcode", "reportingDate"], as_index=False)["numPresentIdpInd"].sum()
+    stock["period"] = stock["reportingDate"].dt.to_period(freq).dt.to_timestamp()
+    stock = (
+        stock.sort_values("reportingDate").groupby(["admin1Pcode", "period"], as_index=False).last()
+    )
+
+    # Complete the monthly grid; forward-fill the stock across the gaps left by
+    # DTM's irregular assessment cadence.
+    periods = pd.period_range(lo, hi, freq=freq).to_timestamp()
+    pcodes = sorted(stock["admin1Pcode"].unique())
+    grid = pd.MultiIndex.from_product([pcodes, periods], names=["admin1Pcode", "period"])
+    layer = (
+        stock.set_index(["admin1Pcode", "period"])["numPresentIdpInd"]
+        .reindex(grid)
+        .groupby(level="admin1Pcode")
+        .ffill()
+        .rename("idp_present")
+        .reset_index()
+    )
+
+    # DTM's SDNN pcodes are the crosswalk's canonical key; map to the spaced
+    # ACLED display name so the layer matches the violence layer's `admin1`.
+    sd_xw = crosswalk[crosswalk["iso3"] == "SDN"]
+    name_of = dict(zip(sd_xw["canonical_pcode"], sd_xw["acled_admin1"]))
+    layer = layer.rename(columns={"admin1Pcode": "canonical_pcode"})
+    layer["admin1"] = layer["canonical_pcode"].map(name_of)
+    layer["idp_present"] = layer["idp_present"].astype("Int64")
+    layer = layer[["canonical_pcode", "admin1", "period", "idp_present"]]
+    layer = layer.sort_values(["canonical_pcode", "period"], ignore_index=True)
+
+    if write:
+        label = _FREQ_LABEL.get(freq, freq)
+        layer.to_parquet(PROCESSED_DIR / f"displacement_admin1_{label}.parquet", index=False)
+    return layer
+
+
+def build_displacement_od(operation: str = DTM_OPERATION, write: bool = True) -> pd.DataFrame:
+    """Build the origin-destination displacement dataset (internal + cross-border).
+
+    Combines two non-overlapping flow families into one tidy frame (Decision 5):
+
+    - **internal** -- Sudan admin-1 -> admin-1 IDP flows, from the latest DTM
+      ``operation`` snapshot (``idpOriginAdmin1`` -> ``admin1``); rows with an
+      unknown origin (:data:`DTM_ORIGIN_UNKNOWN`) are dropped.
+    - **cross_border** -- Sudan -> destination-country refugee flows, from the
+      UNHCR situation portal snapshot (the Decision 5 primary cross-border
+      source). ``destination_code`` is null -- these are country-level.
+
+    Columns: ``flow_type``, ``origin``, ``origin_code``, ``destination``,
+    ``destination_code``, ``individuals``, ``as_of_date``, ``source``. Internal
+    flows include same-state (origin == destination) rows -- displacement that
+    did not cross an admin-1 boundary -- kept as data; the chord diagram decides
+    whether to render self-loops.
+
+    Writes ``data/processed/displacement_od.parquet`` when ``write`` is True.
+    """
+    dtm = pd.read_parquet(_latest_snapshot("dtm_admin1_snapshot"))
+    crosswalk = load_admin1_crosswalk()
+    sd_xw = crosswalk[crosswalk["iso3"] == "SDN"]
+    name_of = dict(zip(sd_xw["canonical_pcode"], sd_xw["acled_admin1"]))
+
+    # --- internal flows: latest DTM snapshot, origin -> destination admin-1 ---
+    d = dtm[dtm["operation"] == operation].copy()
+    d["reportingDate"] = pd.to_datetime(d["reportingDate"])
+    as_of = d["reportingDate"].max()
+    latest = d[(d["reportingDate"] == as_of) & (d["idpOriginAdmin1Pcode"] != DTM_ORIGIN_UNKNOWN)]
+    grp = latest.groupby(["idpOriginAdmin1Pcode", "admin1Pcode"], as_index=False)[
+        "numPresentIdpInd"
+    ].sum()
+    internal = pd.DataFrame(
+        {
+            "flow_type": "internal",
+            "origin": grp["idpOriginAdmin1Pcode"].map(name_of),
+            "origin_code": grp["idpOriginAdmin1Pcode"],
+            "destination": grp["admin1Pcode"].map(name_of),
+            "destination_code": grp["admin1Pcode"],
+            "individuals": grp["numPresentIdpInd"].astype("int64"),
+            "as_of_date": as_of.date().isoformat(),
+            "source": f"IOM DTM ({operation})",
+        }
+    )
+
+    # --- cross-border flows: UNHCR situation portal snapshot (Decision 5) ---
+    portal = fetch_unhcr_situation_countries()
+    cross = pd.DataFrame(
+        {
+            "flow_type": "cross_border",
+            "origin": "Sudan",
+            "origin_code": "SDN",
+            "destination": portal["destination"],
+            "destination_code": pd.NA,  # country-level — no admin-1 pcode
+            "individuals": portal["individuals"].astype("int64"),
+            "as_of_date": portal["as_of_date"],
+            "source": "UNHCR situation portal",
+        }
+    )
+
+    od = pd.concat([internal, cross], ignore_index=True)
+    if write:
+        od.to_parquet(PROCESSED_DIR / "displacement_od.parquet", index=False)
+    return od
