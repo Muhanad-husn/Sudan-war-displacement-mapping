@@ -22,8 +22,14 @@ ROOT = Path(__file__).resolve().parents[2]
 FIGURES_DIR = ROOT / "figures"
 FIGURES_DIR.mkdir(exist_ok=True)
 
-# Project-wide Plotly default.
+# Project-wide Plotly defaults.
 pio.templates.default = "plotly_white"
+
+# Emit both the interactive mimetype (VS Code / JupyterLab) and an HTML
+# fallback (notebook_connected) so figures also render on GitHub's notebook
+# viewer. "notebook_connected" loads plotly.js from a CDN, keeping the .ipynb
+# small — unlike "notebook", which inlines ~3 MB per figure.
+pio.renderers.default = "plotly_mimetype+notebook_connected"
 
 # Human-readable labels for the violence-layer value columns.
 _VALUE_LABELS = {"n_events": "Violent events", "fatalities": "Fatalities"}
