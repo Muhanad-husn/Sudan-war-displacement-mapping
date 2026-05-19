@@ -75,7 +75,13 @@ env/
 notebooks/_scratch/
 data/raw/*
 !data/raw/README.md
+data/external/*
+!data/external/.gitkeep
+# data/processed/ IS committed (small parquets)
+.cache/
 *.cache
+*.sqlite
+*.sqlite-journal
 .requests_cache.sqlite
 
 # ---------------------------------------------------------------------------
